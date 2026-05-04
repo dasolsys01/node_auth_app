@@ -3,7 +3,7 @@ const express = require('express');
 const mongoose = require('mongoose');
 const session = require('express-session');
 const bcrypt = require('bcrypt');
-const user = require('./models/User');
+const User = require('./models/User');
 const dns = require('dns');
 dns.setServers(["1.1.1.1", "8.8.8.8"]);
 
@@ -34,12 +34,45 @@ const isAuth = ( req, res, next) => {
 };
 
 // 메인 페이지 (회원 전용)
+app.get('/', isAuth, (req, res) => {
+  res.render('index', { user: req.session.user });
+});
 
 // 회원 가입 페이지
+app.get('/register', (req, res) => res.render('register'));
+app.post('/register', async (req, res) => {
+  const { userId, password, name } = req.body;
+  try {
+    const hashedPassword = await bcrypt.hash(password, 12);
+    const newUser = new User( { userId, password: hashedPassword, name });
+    await newUser.save();
+    res.redirect('/login');
+  } catch (err) {
+    res.send("회원 가입 실패 : " + err.message);
+  }
+});
 
 // 로그인 페이지
+app.get('/login', (req, res) => res.render('login'));
+app.post('/login', async (req, res) => {
+  const { userId, password } = req.body;
+  const user = await User.findOne( {userId} );
+
+  if( user && await bcrypt.compare(password, user.password)) {
+    req.session.isLoggedIn = true;
+    req.session.user = user;
+    return req.session.save( () => res.redirect('/') );
+  }
+
+  res.send("로그인 정보가 올바르지 않습니다.");
+});
 
 // 로그아웃
+app.get('/logout', (req, res) => {
+  req.session.destroy(() => {
+    res.redirect('/login');
+  });
+});
 
 app.listen(process.env.PORT, () => console.log(`Server running on http://localhost:${process.env.PORT}`));
 
